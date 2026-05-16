@@ -25,8 +25,8 @@ OWASP_SIGNATURES = {
         r"\b(plaintext (?:transmission|storage)|TLS misconfig|certificate validation)\b",
     ],
     "A03:2021 — Injection": [
-        r"\b(SQL injection|SQLi|command injection|XSS|cross.?site (?:script|request))\b",
-        r"\b(LDAP injection|XML injection|template injection|SSTI|OS command|RCE)\b",
+        r"\b(SQL\s+injection|SQLi|command\s+injection|XSS|cross.?site\s+(?:script|request))",
+        r"\b(LDAP\s+injection|XML\s+injection|template\s+injection|SSTI|OS\s+command|RCE)",
     ],
     "A04:2021 — Insecure Design": [
         r"\b(insecure design|threat model(?:ing|ling)|missing security control)\b",
@@ -59,21 +59,21 @@ OWASP_SIGNATURES = {
 
 # === Exploit technique signatures ===
 EXPLOIT_SIGNATURES = {
-    "SQL Injection": [r"\bSQL injection\b", r"\bSQLi\b", r"\bUNION SELECT\b", r"\bblind SQL\b"],
-    "Cross-Site Scripting (XSS)": [r"\bXSS\b", r"\bcross.?site script\b", r"\breflected XSS\b", r"\bstored XSS\b"],
+    "SQL Injection": [r"\bSQL\s+injection", r"\bSQLi\b", r"\bUNION\s+SELECT", r"\bblind\s+SQL"],
+    "Cross-Site Scripting (XSS)": [r"\bXSS\b", r"\bcross.?site\s+script", r"\breflected\s+XSS", r"\bstored\s+XSS"],
     "Cross-Site Request Forgery (CSRF)": [r"\bCSRF\b", r"\bcross.?site request\b"],
-    "Command Injection": [r"\bcommand injection\b", r"\bOS command\b", r"\bshell injection\b"],
-    "Path Traversal": [r"\bpath traversal\b", r"\bdirectory traversal\b", r"\b\.\./\b"],
-    "File Inclusion": [r"\bLFI\b", r"\bRFI\b", r"\bfile inclusion\b", r"\blocal file\b"],
-    "Insecure Deserialization": [r"\bdeserialization\b", r"\bunpickle\b", r"\bmarshal\.load\b"],
-    "XXE Injection": [r"\bXXE\b", r"\bXML external entity\b"],
-    "SSRF": [r"\bSSRF\b", r"\bserver.?side request\b"],
-    "Buffer Overflow": [r"\bbuffer overflow\b", r"\bstack overflow\b", r"\bheap overflow\b", r"\bROP\b"],
-    "Race Condition": [r"\bTOCTOU\b", r"\bTOCTTOU\b", r"\brace condition\b", r"\btime.?of.?check\b"],
-    "Side-Channel Attack": [r"\bside.?channel\b", r"\btiming attack\b", r"\bpower analysis\b"],
-    "Cryptographic Attack": [r"\bpadding oracle\b", r"\b(?:hash|MAC|HMAC) collision\b", r"\bnonce reuse\b"],
-    "Smart Contract Exploit": [r"\breentrancy\b", r"\bflash loan\b", r"\bfront.?running\b", r"\bMEV\b"],
-    "API Abuse": [r"\bAPI (?:abuse|misuse|rate limit|throttle)\b", r"\bGraphQL (?:injection|introspection)\b"],
+    "Command Injection": [r"\bcommand\s+injection", r"\bOS\s+command", r"\bshell\s+injection"],
+    "Path Traversal": [r"\bpath\s+traversal", r"\bdirectory\s+traversal", r"\b\.\./"],
+    "File Inclusion": [r"\bLFI\b", r"\bRFI\b", r"\bfile\s+inclusion", r"\blocal\s+file"],
+    "Insecure Deserialization": [r"\bdeserialization", r"\bunpickle\b", r"\bmarshal\.load"],
+    "XXE Injection": [r"\bXXE\b", r"\bXML\s+external\s+entity"],
+    "SSRF": [r"\bSSRF\b", r"\bserver.?side\s+request"],
+    "Buffer Overflow": [r"\bbuffer\s+overflow", r"\bstack\s+overflow", r"\bheap\s+overflow", r"\bROP\b"],
+    "Race Condition": [r"\bTOCTOU\b", r"\bTOCTTOU\b", r"\brace\s+condition", r"\btime.?of.?check"],
+    "Side-Channel Attack": [r"\bside.?channel", r"\btiming\s+attack", r"\bpower\s+analysis"],
+    "Cryptographic Attack": [r"\bpadding\s+oracle", r"\b(?:hash|MAC|HMAC)\s+collision", r"\bnonce\s+reuse"],
+    "Smart Contract Exploit": [r"\breentrancy", r"\bflash\s+loan", r"\bfront.?running", r"\bMEV\b"],
+    "API Abuse": [r"\bAPI\s+(?:abuse|misuse|rate\s+limit|throttle)", r"\bGraphQL\s+(?:injection|introspection)"],
     "Supply Chain Attack": [r"\bsupply chain\b", r"\bdependency confusion\b", r"\btyposquatting\b"],
 }
 
@@ -101,7 +101,7 @@ def tag_owasp(text: str) -> dict[str, list[str]]:
     for category, signatures in OWASP_SIGNATURES.items():
         matches = []
         for sig in signatures:
-            found = re.findall(sig, text_lower)
+            found = re.findall(sig, text_lower, re.IGNORECASE)
             matches.extend(found)
         if matches:
             results[category] = sorted(set(matches))[:10]  # top 10 unique matches
@@ -115,7 +115,7 @@ def tag_exploits(text: str) -> dict[str, list[str]]:
     for technique, signatures in EXPLOIT_SIGNATURES.items():
         matches = []
         for sig in signatures:
-            found = re.findall(sig, text_lower)
+            found = re.findall(sig, text_lower, re.IGNORECASE)
             matches.extend(found)
         if matches:
             results[technique] = sorted(set(matches))[:5]

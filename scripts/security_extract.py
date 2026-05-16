@@ -64,7 +64,7 @@ EXPLOIT_SIGNATURES = {
     "Cross-Site Request Forgery (CSRF)": [r"\bCSRF\b", r"\bcross.?site request\b"],
     "Command Injection": [r"\bcommand\s+injection", r"\bOS\s+command", r"\bshell\s+injection"],
     "Path Traversal": [r"\bpath\s+traversal", r"\bdirectory\s+traversal", r"\b\.\./"],
-    "File Inclusion": [r"\bLFI\b", r"\bRFI\b", r"\bfile\s+inclusion", r"\blocal\s+file"],
+    "File Inclusion": [r"\bLFI\b", r"\bRFI\b", r"\bLFl\b", r"\blfi\b", r"\bfile\s+inclusion", r"\blocal\s+file"],
     "Insecure Deserialization": [r"\bdeserialization", r"\bunpickle\b", r"\bmarshal\.load"],
     "XXE Injection": [r"\bXXE\b", r"\bXML\s+external\s+entity"],
     "SSRF": [r"\bSSRF\b", r"\bserver.?side\s+request"],
@@ -75,11 +75,14 @@ EXPLOIT_SIGNATURES = {
     "Smart Contract Exploit": [r"\breentrancy", r"\bflash\s+loan", r"\bfront.?running", r"\bMEV\b"],
     "API Abuse": [r"\bAPI\s+(?:abuse|misuse|rate\s+limit|throttle)", r"\bGraphQL\s+(?:injection|introspection)"],
     "Supply Chain Attack": [r"\bsupply chain\b", r"\bdependency confusion\b", r"\btyposquatting\b"],
+    "Open Redirect": [r"\bopen\s*[-\s]?\s*redirect", r"\bopenredirect\b"],
+    "Account Takeover": [r"\baccount\s+takeover", r"\bATO\b"],
+    "Subdomain Takeover": [r"\bsubdomain\s*[-\s]?\s*takeover"],
 }
 
 # === Conway Automaton module mapping ===
 CONWAY_MODULES = {
-    "web_auditor": ["SQL", "XSS", "CSRF", "injection", "path traversal", "SSRF", "file inclusion", "XXE"],
+    "web_auditor": ["SQL", "XSS", "CSRF", "injection", "path traversal", "SSRF", "file inclusion", "XXE", "open redirect", "account takeover", "subdomain takeover"],
     "api_fuzzer": ["API", "GraphQL", "rate limit", "authentication", "authorization", "REST"],
     "smart_contract_scanner": ["smart contract", "reentrancy", "Solidity", "EVM", "flash loan", "MEV"],
     "network_recon": ["port scan", "service discovery", "banner grab", "DNS", "subdomain"],
@@ -104,7 +107,7 @@ def tag_owasp(text: str) -> dict[str, list[str]]:
             found = re.findall(sig, text_lower, re.IGNORECASE)
             matches.extend(found)
         if matches:
-            results[category] = sorted(set(matches))[:10]  # top 10 unique matches
+            results[category] = sorted(set(matches))[:10]
     return results
 
 
@@ -144,8 +147,8 @@ def estimate_audit_coverage(owasp_tags: dict, exploit_tags: dict) -> int:
     covered_owasp = len(owasp_tags)
     covered_exploit = len(exploit_tags)
 
-    owasp_score = (covered_owasp / total_owasp) * 60  # OWASP is 60% of score
-    exploit_score = (covered_exploit / total_exploit) * 40  # Exploit techniques 40%
+    owasp_score = (covered_owasp / total_owasp) * 60
+    exploit_score = (covered_exploit / total_exploit) * 40
     return min(int(owasp_score + exploit_score), 100)
 
 
@@ -160,33 +163,27 @@ def main():
 
     print("🔐 Security extraction — analyzing...")
 
-    # Extract CVEs
     cves = extract_cves(text)
     print(f"   CVEs found: {len(cves)}")
 
-    # Tag OWASP
     owasp = tag_owasp(text)
     print(f"   OWASP categories matched: {len(owasp)}")
     for cat in owasp:
         print(f"     ✓ {cat}")
 
-    # Tag exploits
     exploits = tag_exploits(text)
     print(f"   Exploit techniques detected: {len(exploits)}")
     for tech in exploits:
         print(f"     ✓ {tech}")
 
-    # Map to Conway
     conway_map = map_to_conway(owasp, exploits)
     print(f"   Conway modules activated: {len(conway_map)}")
     for mod, kws in conway_map.items():
         print(f"     ✓ {mod}: {', '.join(kws)}")
 
-    # Estimate coverage
     coverage = estimate_audit_coverage(owasp, exploits)
     print(f"   Estimated audit coverage: {coverage}%")
 
-    # Write output
     output = {
         "cves": cves,
         "owasp_categories": list(owasp.keys()),

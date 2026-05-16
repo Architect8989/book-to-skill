@@ -2,10 +2,13 @@
 """
 Extract text from a PDF or EPUB file for book-to-skill processing.
 
+Rhodawk Security Edition — supports --mode security for OWASP/CVE-aware extraction.
+
 PDF extraction tries methods in order:
   1. pdftotext (poppler-utils) — best quality
   2. PyPDF2 — common Python library
   3. pdfminer.six — thorough fallback
+  4. Docling — layout-aware (tables, code blocks preserved as markdown)
 
 EPUB extraction tries methods in order:
   1. ebooklib + BeautifulSoup4 — best quality
@@ -14,6 +17,7 @@ EPUB extraction tries methods in order:
 Outputs:
   /tmp/book_skill_work/full_text.txt  — full extracted text
   /tmp/book_skill_work/metadata.json  — stats and metadata
+  /tmp/book_skill_work/security_tags.json — OWASP/CVE/exploit tags (security mode)
 """
 
 import html
@@ -108,7 +112,6 @@ class _HTMLTextExtractor(html.parser.HTMLParser):
         super().__init__()
         self._parts: list[str] = []
         self._skip_depth = 0
-        self._current_skip: str | None = None
 
     def handle_starttag(self, tag, attrs):
         if tag in self.SKIP_TAGS:
@@ -133,7 +136,6 @@ def extract_with_zipfile(epub_path: str) -> str | None:
     try:
         with zipfile.ZipFile(epub_path) as zf:
             names = zf.namelist()
-            # Read OPF spine to get reading order, fall back to sorted xhtml files
             spine_order: list[str] = []
             opf_files = [n for n in names if n.endswith(".opf")]
             if opf_files:
@@ -199,7 +201,6 @@ def count_epub_chapters(epub_path: str) -> int:
 
 
 def count_pages(pdf_path: str) -> int:
-    # Try pdfinfo first
     if shutil.which("pdfinfo"):
         try:
             result = subprocess.run(
@@ -210,7 +211,6 @@ def count_pages(pdf_path: str) -> int:
                     return int(line.split(":")[1].strip())
         except Exception:
             pass
-    # Fallback: count form-feed chars (pdftotext -layout uses \f between pages)
     try:
         import PyPDF2
         with open(pdf_path, "rb") as f:
@@ -221,17 +221,14 @@ def count_pages(pdf_path: str) -> int:
 
 def detect_structure(text: str) -> dict:
     """Detect chapter count and table of contents presence."""
-    import re
     lines = text[:50000].splitlines()
 
-    # Look for chapter headings
     chapter_pattern = re.compile(
         r"^\s*(chapter\s+\d+|CHAPTER\s+\d+|ch\.\s*\d+|\d+\.\s+[A-Z])",
         re.IGNORECASE
     )
     chapters_found = [l.strip() for l in lines if chapter_pattern.match(l)]
 
-    # Look for ToC indicators
     toc_keywords = ["table of contents", "contents", "índice", "sumário"]
     has_toc = any(kw in text[:5000].lower() for kw in toc_keywords)
 
@@ -269,7 +266,8 @@ def extract_with_docling(pdf_path: str) -> str | None:
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: extract.py <path-to-pdf-or-epub> [--mode technical|text]", file=sys.stderr)
+        print("Usage: extract.py <path-to-pdf-or-epub> [--mode technical|text|security]",
+              file=sys.stderr)
         sys.exit(1)
 
     input_path = sys.argv[1]
@@ -280,7 +278,7 @@ def main():
         idx = sys.argv.index("--mode")
         if idx + 1 < len(sys.argv):
             extraction_mode = sys.argv[idx + 1].lower()
-    if extraction_mode not in ("technical", "text"):
+    if extraction_mode not in ("technical", "text", "security"):
         extraction_mode = "text"
 
     if not os.path.exists(input_path):
@@ -292,12 +290,11 @@ def main():
     is_pdf = ext == ".pdf"
 
     if not is_epub and not is_pdf:
-        # Sniff magic bytes as fallback
         with open(input_path, "rb") as f:
             header = f.read(8)
         if header[:4] == b"%PDF":
             is_pdf = True
-        elif header[:2] == b"PK":  # ZIP magic → likely EPUB
+        elif header[:2] == b"PK":
             is_epub = True
         else:
             print(
@@ -308,6 +305,9 @@ def main():
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    use_docling = extraction_mode in ("technical", "security")
+    method = "unknown"
+
     if is_epub:
         print(f"Extracting EPUB: {input_path}")
         text, method = extract_epub(input_path)
@@ -315,21 +315,21 @@ def main():
         pages_label = "spine_items"
     else:
         print(f"Extracting PDF: {input_path}")
-        if extraction_mode == "technical":
-            print("Mode: technical — using Docling (layout-aware)...", end=" ", flush=True)
+        if use_docling:
+            mode_label = "security" if extraction_mode == "security" else "technical"
+            print(f"Mode: {mode_label} — using Docling (layout-aware)...", end=" ", flush=True)
             text = extract_with_docling(input_path)
             if text:
                 method = "docling"
                 print("OK")
             else:
                 print("not available, falling back to pdftotext")
-                extraction_mode = "text"
+                use_docling = False
 
-        if extraction_mode == "text":
+        if not use_docling:
             print("Mode: text — using pdftotext...")
             print("Trying pdftotext...", end=" ", flush=True)
             text = extract_with_pdftotext(input_path)
-
             if text:
                 method = "pdftotext"
                 print("OK")
@@ -398,6 +398,22 @@ def main():
     print(f"   ToC     : {'yes' if structure['has_toc'] else 'not detected'}")
     print(f"\n   Text → {OUTPUT_TEXT}")
     print(f"   Meta → {OUTPUT_META}")
+
+    # Run security extraction if in security mode
+    if extraction_mode == "security":
+        print("\n🔐 Running security extraction post-processor...")
+        script_dir = Path(__file__).parent
+        security_script = script_dir / "security_extract.py"
+        if security_script.exists():
+            result = subprocess.run(
+                [sys.executable, str(security_script)],
+                capture_output=True, text=True, timeout=60
+            )
+            print(result.stdout)
+            if result.returncode != 0:
+                print(result.stderr, file=sys.stderr)
+        else:
+            print(f"   WARNING: security_extract.py not found at {security_script}")
 
 
 if __name__ == "__main__":
